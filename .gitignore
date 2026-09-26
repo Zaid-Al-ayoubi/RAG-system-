@@ -1,0 +1,15 @@
+# بيئة وأسرار
+.env
+venv/
+
+# بايثون
+__pycache__/
+*.pyc
+
+# قواعد بيانات محلية
+*.sqlite
+
+# ملفات نتائج (اختياري - قرر انت)
+# adaptive_test_results.json
+# test_results.json
+# metrics_report.json
