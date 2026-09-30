@@ -15,7 +15,7 @@ The project was built in 3 sequential stages, and is now expanding into a fourth
 | **1. Basic RAG** | Flask + Azure AI Search (hybrid + semantic) + Azure OpenAI, with grounding and conversation memory | ✅ Complete |
 | **2. Agentic RAG** | Real tool calling: `rag_search`, `calculator`, `create_ticket` | ✅ Complete — 8/8 test cases passing |
 | **3. Adaptive RAG** | 7-stage pipeline: classification → adaptive retrieval → query rewriting → quality check → reranking → multi-hop → answer generation | ✅ Complete |
-| **4. Voice RAG Agent** | Converting the agent into a bilingual (Arabic/English) voice conversation with Barge-In support | 🔜 In progress |
+| **4. Voice RAG Agent** | Converting the agent into a bilingual (Arabic/English) voice conversation with Barge-In support | ✅ Complete — 8/8 test cases passing |
 
 ---
 
@@ -148,64 +148,92 @@ A transparent log of the most significant issues discovered during development (
 
 ---
 
-## 🎙️ Next Phase: Voice RAG Agent
+## 🎙️ Stage 4: Voice RAG Agent
 
 **Task (from Hamzah):** Upgrade the existing agent (RAG/Agentic RAG) to support natural voice
-conversation in Arabic and English, using Azure Speech.
+conversation in Arabic and English, using Azure Speech. **Status: ✅ Built, tested, and
+documented.**
 
-### Core Requirements
-- Accept user questions through the microphone
-- **Azure Speech-to-Text** for speech recognition
-- Automatic language identification (Arabic/English) and response in the same language
-- **Azure Speech Text-to-Speech** to deliver the answer as voice
-- Maintain conversation history for follow-up questions
-- **Barge-In support**: the user can interrupt the agent while it's speaking, and it must stop
-  immediately and listen to the new question
+### What was built
 
-### Expected Flow
+A console application (`voice_agent.py`) that wraps the exact same `agent_service.run_agent()`
+used by the text-based app — same three tools (`rag_search`, `calculator`, `create_ticket`),
+same conversation memory logic — behind a full voice interface:
+
+- **Azure Speech-to-Text** with continuous recognition
+- **Automatic language identification** (`ar-JO` / `en-US`) via
+  `AutoDetectSourceLanguageConfig` in `Continuous` LID mode
+- **Azure Text-to-Speech**, voice selected dynamically to match the detected language
+  (`ar-JO-TaimNeural` / `en-US-JennyNeural`)
+- **Conversation history** carried across turns, enabling follow-up questions in either language
+- **Real Barge-In**: a background listener runs in parallel with TTS playback; on genuine
+  user speech it stops audio immediately, discards the interrupted turn, and processes the
+  new question
+
+### Architecture
+
+See [`voice_agent_architecture.svg`](./voice_agent_architecture.svg) for the full diagram.
 
 ```
 Normal flow:
-User (voice) → Azure STT → RAG/Agent → Azure TTS → Voice response
+Microphone → Azure STT (continuous, auto-detect ar/en) → Agentic RAG agent
+(tools + memory) → Azure TTS (voice matches language) → Speaker
 
-On interruption:
-Agent speaking → User interrupts → Agent stops immediately
-→ New question → RAG/Agent → New voice response
+Barge-in loop (runs in parallel with TTS playback):
+Agent speaking → partial recognition detects real user speech → stop TTS
+→ new question → back into the pipeline → new voice response
 ```
 
-### Required Test Cases
+### Test Cases — 8/8, confirmed with Hamzah
 
-> ⚠️ **Important note**: the task instructions contain a conflicting count of test cases —
-> the "Test Cases" section requests **exactly 8**, while the "Deliverables" section requests
-> **exactly 5**. Confirmation has been requested from Hamzah; the table below is based on the
-> full list of 8 pending clarification.
+> The task's "Test Cases" section requested 8, while "Deliverables" said 5 — confirmed with
+> Hamzah: **8 is correct**, and all 8 are documented below.
 
-| # | Case |
-|---|---|
-| 1 | Normal Arabic voice question |
-| 2 | Normal English voice question |
-| 3 | Arabic follow-up question |
-| 4 | English follow-up question |
-| 5 | User interrupts the agent while speaking |
-| 6 | Multiple consecutive interruptions |
-| 7 | Question with no answer in the knowledge base |
-| 8 | Interrupting a long response with a new question in a different language |
+Full transcripts and results: [`voice_agent_test_cases.md`](./voice_agent_test_cases.md).
+
+| # | Case | Result |
+|---|---|---|
+| 1 | Normal Arabic voice question | ✅ |
+| 2 | Normal English voice question | ✅ |
+| 3 | Arabic follow-up question | ✅ |
+| 4 | English follow-up question | ✅ |
+| 5 | User interrupts the agent while speaking | ✅ |
+| 6 | Multiple consecutive interruptions | ✅ (10+ barge-ins in one session, no crash) |
+| 7 | Question with no answer in the knowledge base | ✅ (reproduced twice) |
+| 8 | Interrupting a long response with a new question in a different language | ✅ |
 
 ### Deliverables
-- [ ] Fully working Voice Agent
-- [ ] Azure Speech-to-Text
-- [ ] Azure Speech Text-to-Speech
-- [ ] Arabic/English language detection and response
-- [ ] Conversation history
-- [ ] Voice Activity Detection / interruption detection
-- [ ] Working Barge-In functionality
-- [ ] Architecture diagram
-- [ ] Test cases (8 or 5 — pending confirmation) documented with results
-- [ ] Short live demo
 
-> ⚠️ **Note from the task itself**: simply adding STT/TTS is not enough — the core focus is
-> real-time voice conversation, bilingual support, and genuine interruption/barge-in behavior.
-> Use of Microsoft's current, ready-to-use Speech models is explicitly required.
+- [x] Fully working Voice Agent
+- [x] Azure Speech-to-Text
+- [x] Azure Speech Text-to-Speech
+- [x] Arabic/English language detection and response
+- [x] Conversation history
+- [x] Voice Activity Detection / interruption detection
+- [x] Working Barge-In functionality
+- [x] Architecture diagram
+- [x] 8 test cases documented with results
+- [ ] Short live demo — scheduled with Hamzah
+
+### Known limitations (documented, not hidden)
+
+These are expected characteristics of any voice pipeline built on the standard Azure Speech
+SDK (i.e. without custom hardware-level Acoustic Echo Cancellation), not design defects:
+
+- **STT accuracy drops with distance from the mic and with unclear/hesitant speech.** Expected
+  for any STT engine, not specific to Azure.
+- **Language ID (LID) drifts toward the dominant language of the session.** Short or unclear
+  utterances in the less-used language can occasionally be misclassified after several
+  consecutive turns in the other language. In a balanced back-and-forth conversation with clear
+  speech, zero misclassifications were observed across several language switches — the
+  deciding factors are speech clarity and language balance, not utterance length.
+- **Acoustic echo when using speakers instead of headphones.** The mic can pick up the agent's
+  own voice and misread it as an interruption. Mitigated with a text-similarity filter against
+  the last answer (`_looks_like_echo`, 60% overlap threshold); headphones remain the reliable
+  fix, same as any commercial voice assistant.
+- **Partial recognition text is a rough guess, not a final transcript.** The text shown during
+  an in-progress utterance (used only to trigger barge-in) is expected to be inaccurate — the
+  final transcript, used for actual processing, is accurate.
 
 ---
 
@@ -238,6 +266,10 @@ Agent speaking → User interrupts → Agent stops immediately
 ├── test_retriever.py                # Retrieval tests
 ├── test_adaptive_rag.py             # Adaptive RAG tests (8 cases)
 ├── evaluate_adaptive_rag.py         # Official metrics computation
+│
+├── voice_agent.py                   # Voice RAG entry point (STT + LID + Agent + TTS + Barge-In)
+├── voice_agent_architecture.svg     # Architecture diagram for the voice pipeline
+├── voice_agent_test_cases.md        # 8 documented voice test cases with real transcripts
 │
 └── .env                         # (not committed — see .env.example if present)
 ```
