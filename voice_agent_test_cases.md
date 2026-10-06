@@ -28,27 +28,7 @@
 ومطابق لمحتوى المستند، ورجع صوتياً بالعربي.
 
 ---
-
-## حالة 2 — سؤال صوتي عادي بالإنجليزي
-
-**المتوقع:** التقاط سؤال إنجليزي، تصنيفه `en`، رد صوتي إنجليزي بصوت
-`en-US-JennyNeural`.
-
-**المدخل الصوتي:** *"What is the employee's share for medical insurance inside the network?"*
-
-**الفعلي:**
-```
-[en] أنت: OK, great. What is the employee's, uh, share from medical insurance inside the network?
-🤖 الوكيل: Inside the approved network, the employee's co-payment is 10% of
-the total bill, and the company covers the remaining 90%...
-   🔧 أدوات مستخدمة: ['rag_search']
-```
-
-**النتيجة:** ✅ نجاح كامل، حتى مع وجود تردد طبيعي بالكلام ("uh").
-
----
-
-## حالة 3 — سؤال متابعة (follow-up) بالعربي
+## حالة 2 — سؤال متابعة (follow-up) بالعربي
 
 **المتوقع:** سؤال يعتمد على سياق السؤال السابق بدون إعادة ذكره صراحة، والذاكرة
 (`history`) تحل المرجع بنجاح.
@@ -68,6 +48,26 @@ the total bill, and the company covers the remaining 90%...
 ربطها صح بالسياق السابق عبر `history`.
 
 ---
+## حالة 3 — سؤال صوتي عادي بالإنجليزي
+
+**المتوقع:** التقاط سؤال إنجليزي، تصنيفه `en`، رد صوتي إنجليزي بصوت
+`en-US-JennyNeural`.
+
+**المدخل الصوتي:** *"What is the employee's share for medical insurance inside the network?"*
+
+**الفعلي:**
+```
+[en] أنت: OK, great. What is the employee's, uh, share from medical insurance inside the network?
+🤖 الوكيل: Inside the approved network, the employee's co-payment is 10% of
+the total bill, and the company covers the remaining 90%...
+   🔧 أدوات مستخدمة: ['rag_search']
+```
+
+**النتيجة:** ✅ نجاح كامل، حتى مع وجود تردد طبيعي بالكلام ("uh").
+
+---
+
+
 
 ## حالة 4 — سؤال متابعة (follow-up) بالإنجليزي
 
@@ -129,7 +129,6 @@ and the company's insurance requires prior approval from the insurer...
 [ar] أنت: طيب شو سياسة الشركة بخصوص العمل في المنزل أو من جوجل؟
 🤖 الوكيل: [جواب مركّب: جزء من المستندات + اعتراف بعدم توفر معلومة جوجل]
 
-🛑 [barge-in] كشفت كلام جزئي: 'the oxford'
 🛑 [barge-in] المستخدم قاطع — وقفنا الصوت (بعد 24.8s)
 ```
 
