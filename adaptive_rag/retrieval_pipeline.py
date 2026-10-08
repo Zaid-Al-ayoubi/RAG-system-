@@ -8,11 +8,11 @@
 - محاولة 3: صياغة جديدة + تصعيد الاستراتيجية كمان
 """
 
-from query_classifier import classify_query
-from adaptive_retriever import adaptive_retrieve
-from query_rewriter import rewrite_query
-from quality_checker import check_sufficiency
-from multi_hop_retriever import multi_hop_retrieve
+from adaptive_rag.query_classifier import classify_query
+from adaptive_rag.adaptive_retriever import adaptive_retrieve
+from adaptive_rag.query_rewriter import rewrite_query
+from adaptive_rag.quality_checker import check_sufficiency
+from adaptive_rag.multi_hop_retriever import multi_hop_retrieve
 
 MAX_ATTEMPTS = 3
 

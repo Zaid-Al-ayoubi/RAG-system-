@@ -5,8 +5,8 @@
 لغير hybrid) و6 (multi-hop تسلسلي حقيقي) لسا ما انبنوا كوحدات منفصلة.
 """
 
-from retrieval_pipeline import retrieve_with_quality_loop
-from answer_generator import generate_grounded_answer
+from adaptive_rag.retrieval_pipeline import retrieve_with_quality_loop
+from adaptive_rag.answer_generator import generate_grounded_answer
 
 
 def answer_query(query: str, top_k: int = 3, history: list[dict] | None = None) -> dict:

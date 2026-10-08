@@ -10,8 +10,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from query_classifier import classify_query
-from adaptive_retriever import adaptive_retrieve
+from adaptive_rag.query_classifier import classify_query
+from adaptive_rag.adaptive_retriever import adaptive_retrieve
+from adaptive_rag.adaptive_rag import answer_query
 
 TEST_QUERIES = [
     "كم يوم إجازة سنوية يستحق الموظف؟",
