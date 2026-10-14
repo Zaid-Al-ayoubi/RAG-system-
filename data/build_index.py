@@ -8,7 +8,7 @@
 import os
 import json
 import hashlib
-
+from pathlib import Path
 from dotenv import load_dotenv
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
@@ -35,7 +35,7 @@ load_dotenv()  # يقرأ القيم من ملف .env المجاور للسكر�
 SEARCH_ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
 SEARCH_KEY = os.environ["AZURE_SEARCH_KEY"]
 INDEX_NAME = os.environ["AZURE_SEARCH_INDEX_NAME"]
-
+DATA_DIR = Path(__file__).resolve().parent
 # لازم يطابق فعلياً موديل الـembedding يلي عندك:
 # text-embedding-3-small / text-embedding-ada-002 -> 1536
 # text-embedding-3-large -> 3072
@@ -125,7 +125,7 @@ def create_index_if_not_exists():
     print(f"الـindex '{INDEX_NAME}' جاهز.")
 
 
-def upload_chunks(chunks_path: str = "chunks.json"):
+def upload_chunks(chunks_path=DATA_DIR / "chunks.json"):
     with open(chunks_path, "r", encoding="utf-8") as f:
         chunks = json.load(f)
 
