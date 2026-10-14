@@ -12,11 +12,11 @@
 
 import json
 from dotenv import load_dotenv
-
+from pathlib import Path
 load_dotenv()
 
 from core.agent_service import run_agent
-
+RESULTS_PATH = Path(__file__).resolve().parent / "test_results.json"
 TEST_CASES = [
     {
         "id": 1,
@@ -115,7 +115,7 @@ if __name__ == "__main__":
             }
         )
 
-    with open("test_results.json", "w", encoding="utf-8") as f:
+    with open(RESULTS_PATH, "w", encoding="utf-8") as f:
         json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
 
     print(f"\n{'=' * 60}")

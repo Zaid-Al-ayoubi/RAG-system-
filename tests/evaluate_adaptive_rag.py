@@ -8,6 +8,9 @@ import re
 from pathlib import Path
 
 
+HERE = Path(__file__).resolve().parent
+input_path = HERE / "adaptive_test_results.json"
+
 def _extract_numbers(text: str) -> set[str]:
     return set(re.findall(r"\d+(?:\.\d+)?%?", text or ""))
 
@@ -192,7 +195,7 @@ def print_report(metrics: dict):
 
 
 if __name__ == "__main__":
-    input_path = Path("adaptive_test_results.json")
+    input_path = HERE / "adaptive_test_results.json"
     if not input_path.exists():
         print(f"❌ ملف {input_path} غير موجود. شغّل test_adaptive_rag.py أولاً.")
         raise SystemExit(1)
@@ -203,7 +206,7 @@ if __name__ == "__main__":
     metrics = compute_metrics(results)
     print_report(metrics)
 
-    output_path = "metrics_report.json"
+    output_path = HERE / "metrics_report.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
 
