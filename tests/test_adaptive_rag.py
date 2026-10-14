@@ -291,7 +291,7 @@ if __name__ == "__main__":
     print(f"متوسط الزمن: {avg_latency:.2f} ثانية")
 
     # حفظ النتائج
-    output_path = "adaptive_test_results.json"
+    output_path = Path(__file__).resolve().parent / "adaptive_test_results.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
     print(f"\n✅ تم حفظ النتائج بـ {output_path}")

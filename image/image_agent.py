@@ -17,7 +17,7 @@ VALID_EXT = (".jpg", ".jpeg", ".png", ".webp")
 
 
 def clean_answer(text: str) -> str:
-    text = re.sub(r"[*_`#>]+", "", text)
+    text = re.sub(r"[*`#>]+", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

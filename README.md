@@ -4,7 +4,8 @@ A progressive training project (GenAI Training @ Watira) building an internal **
 that answers employee questions about company policies (leave, payroll, medical insurance,
 cybersecurity, technical development), powered by **Azure OpenAI** and **Azure AI Search**.
 
-The project was built in 3 sequential stages, and is now expanding into a fourth (Voice RAG).
+The project was built in 5 sequential stages: from a basic RAG pipeline to an agent that
+understands voice and images.
 
 ---
 
@@ -15,7 +16,8 @@ The project was built in 3 sequential stages, and is now expanding into a fourth
 | **1. Basic RAG** | Flask + Azure AI Search (hybrid + semantic) + Azure OpenAI, with grounding and conversation memory | ✅ Complete |
 | **2. Agentic RAG** | Real tool calling: `rag_search`, `calculator`, `create_ticket` | ✅ Complete — 8/8 test cases passing |
 | **3. Adaptive RAG** | 7-stage pipeline: classification → adaptive retrieval → query rewriting → quality check → reranking → multi-hop → answer generation | ✅ Complete |
-| **4. Voice RAG Agent** | Converting the agent into a bilingual (Arabic/English) voice conversation with Barge-In support | ✅ Complete — 8/8 test cases passing |
+| **4. Voice RAG Agent** | Bilingual (Arabic/English) voice conversation with Barge-In support | ✅ Complete — 8/8 test cases passing |
+| **5. Image Understanding & OCR Agent** | Image analysis and Arabic/English OCR, integrated into the same agent | ✅ Built and tested — 8/8 test cases passing |
 
 ---
 
@@ -25,15 +27,17 @@ The project was built in 3 sequential stages, and is now expanding into a fourth
 User
   │
   ▼
-Flask App (app.py)
+app.py (Flask)
   │
-  ├──► Agentic RAG (agent_service.py)  ◄── Currently active path in the app
+  ├──► Agentic RAG (core/agent_service.py)  ◄── Currently active path in the app
   │        │
-  │        ├── rag_search      → search_service.py → Azure AI Search
-  │        ├── calculator      → tools.py (safe eval)
-  │        └── create_ticket   → tools.py (in-memory mock)
+  │        ├── rag_search         → core/search_service.py → Azure AI Search
+  │        ├── calculator         → core/tools.py (safe eval)
+  │        ├── create_ticket      → core/tools.py (in-memory mock)
+  │        ├── analyze_image      → core/image_tools.py (vision)
+  │        └── extract_text_ocr   → core/image_tools.py (OCR)
   │
-  └──► Adaptive RAG (adaptive_rag.py)  ◄── Ready, standalone, not yet wired into app.py
+  └──► Adaptive RAG (adaptive_rag/)  ◄── Ready, standalone, not yet wired into app.py
            │
            ├── 1. query_classifier.py     (query type + retrieval strategy classification)
            ├── 2. adaptive_retriever.py    (hybrid / vector / keyword / metadata_filtered)
@@ -42,9 +46,17 @@ Flask App (app.py)
            ├── 5. reranker.py              (explicit re-ranking and filtering)
            ├── 6. multi_hop_retriever.py   (sequential retrieval for multi-step questions)
            └── 7. answer_generator.py      (final grounded answer generation)
+
+voice/ and image/ are console apps that wrap the same core/agent_service.run_agent()
+as the Flask app (same tools, same conversation-memory logic).
 ```
 
-> 📎 A detailed architecture diagram is provided separately (attached as PNG in the report).
+**Dependency direction:** `voice/`, `image/`, `adaptive_rag/`, `tests/` and `app.py` import from
+`core/`; `core/` never imports from them. This keeps the shared agent logic independent of
+any specific interface.
+
+> 📎 Detailed architecture diagrams: [`voice/voice_agent_architecture.svg`](./voice/voice_agent_architecture.svg)
+> and [`image/image_agent_architecture.svg`](./image/image_agent_architecture.svg).
 
 ---
 
@@ -54,6 +66,7 @@ Flask App (app.py)
 - Python 3.11+
 - Azure OpenAI account (chat + embedding deployments)
 - Azure AI Search account
+- Azure Speech resource (only for the voice agent)
 
 ### Installation
 
@@ -77,27 +90,44 @@ AZURE_OPENAI_API_VERSION=2024-02-01
 AZURE_SEARCH_ENDPOINT=...
 AZURE_SEARCH_KEY=...
 AZURE_SEARCH_INDEX_NAME=...
+
+AZURE_SPEECH_KEY=...
+AZURE_SPEECH_REGION=...
 ```
 
-> ⚠️ **Never commit `.env`** — it's excluded via `.gitignore`. Use `.env.example` as a template if you need one.
+> ⚠️ **Never commit `.env`** — it's excluded via `.gitignore`. Use `.env.example` as a template.
+
+### How to run anything in this project
+
+**Always run from the project root, and run scripts as modules (`python -m ...`).**
+Running a file directly from inside a sub-folder (e.g. `python voice/voice_agent.py`) puts that
+sub-folder first on `sys.path`, so imports like `core.agent_service` fail to resolve.
+
+| What | Command |
+|---|---|
+| Flask app (Agentic RAG) | `python app.py` |
+| Build / rebuild the search index | `python -m data.build_index` |
+| Re-chunk the source documents | `python -m data.ChunkDocumentsExplained` |
+| Voice agent | `python -m voice.voice_agent` |
+| Image + OCR agent | `python -m image.image_agent` |
 
 ### Building the Index
 
 ```bash
-python build_index.py
+python -m data.build_index
 ```
 
 This deletes the existing index (if any) and recreates it with the correct semantic search
-configuration, then uploads all chunks from `chunks.json` along with their embeddings.
+configuration, then uploads all chunks from `data/chunks.json` along with their embeddings.
 
 > Note: training-tier Azure accounts occasionally lose their `semantic configuration` setting.
-> If you see a `semanticConfiguration` error, simply rerun `build_index.py`.
+> If you see a `semanticConfiguration` error, simply rerun `python -m data.build_index`.
 
-### Running the App
+### Import-order requirement
 
-```bash
-python app.py
-```
+`core/search_service.py` reads `USE_MOCK_SERVICES` **at import time**, so every entry point calls
+`load_dotenv()` **before** importing anything from `core/`. Keep `core/__init__.py` empty for the
+same reason: importing the package must not trigger any module that reads the environment.
 
 ---
 
@@ -105,16 +135,25 @@ python app.py
 
 | Test file | Covers |
 |---|---|
-| `test_cases.py` | 8 Agentic RAG cases (tool selection, execution) |
-| `test_classifier.py` | Query classification accuracy (type + strategy) |
-| `test_retriever.py` | Combined classification + adaptive retrieval |
-| `test_adaptive_rag.py` | 8 end-to-end Adaptive RAG cases (saves results to `adaptive_test_results.json`) |
-| `evaluate_adaptive_rag.py` | Computes 9 official metrics from test results (`metrics_report.json`) |
+| `tests/test_cases.py` | 8 Agentic RAG cases (tool selection, execution) |
+| `tests/test_classifier.py` | Query classification accuracy (type + strategy) |
+| `tests/test_retriever.py` | Combined classification + adaptive retrieval |
+| `tests/test_adaptive_rag.py` | 8 end-to-end Adaptive RAG cases (saves `tests/adaptive_test_results.json`) |
+| `tests/evaluate_adaptive_rag.py` | Computes 9 official metrics from test results (`tests/metrics_report.json`) |
 
 ```bash
-python test_adaptive_rag.py
-python evaluate_adaptive_rag.py
+python -m tests.test_cases
+python -m tests.test_adaptive_rag
+python -m tests.evaluate_adaptive_rag
 ```
+
+The voice and image agents are interactive, so their 8 test cases each were run manually and
+documented from real logs: [`voice/voice_agent_test_cases.md`](./voice/voice_agent_test_cases.md)
+and [`image/image_agent_test_cases.md`](./image/image_agent_test_cases.md).
+
+> LLM-backed tests overwrite their result JSON files on every run, and results vary slightly
+> between runs (see *LLM non-determinism* below). Restore the committed results with
+> `git restore tests/<file>.json` if you only wanted to check that the code still runs.
 
 ---
 
@@ -124,7 +163,7 @@ A transparent log of the most significant issues discovered during development (
 
 - **Recurring semantic ranker reset**: confusion between service-level and index-level
   configuration — fixed by defining `semantic_search` explicitly inside the index definition
-  in `build_index.py`, with documentation that this may recur on training-tier accounts.
+  in `data/build_index.py`, with documentation that this may recur on training-tier accounts.
 - **`comparison` vs `multi_step` misclassification**: an unresolved reference ("the same
   platform") was sometimes classified as a comparison instead of sequential reasoning →
   an explicit disambiguation rule was added to the prompt.
@@ -145,20 +184,34 @@ A transparent log of the most significant issues discovered during development (
 - **LLM non-determinism even at `temperature=0`**: `multi_source` questions can receive a
   fluctuating sufficiency decision across two identical runs of the same question, due to
   slight variance in reranker output — documented as expected behavior, not a defect.
+- **Sycophantic confirmation in OCR**: on low-quality images, a question that presupposes a
+  value ("is the name X?") could pull the model toward confirming it instead of reading the
+  actual text. The OCR system prompt now explicitly warns against this; the risk is reduced,
+  not guaranteed to be eliminated.
+- **Date arithmetic and unstated interpretive assumptions**: the model estimated a service
+  duration linguistically instead of computing it (a system-prompt rule now forces use of
+  `calculator`). After that fix, a deeper issue surfaced: the model applied a *pro-rata*
+  calculation for an incomplete year, although the policy only says "21 days per **full** year".
+  This is an interpretive decision not supported by the source, so it is treated as a
+  grounding issue, not just a calculation bug (details in the Image Agent section).
+- **Restructuring a flat project into packages**: moving files into folders breaks imports
+  loudly but breaks *relative file paths* silently (e.g. `open("chunks.json")` resolves against
+  the current working directory, not the script's location). File paths are now anchored with
+  `Path(__file__)`, and the move was done one folder at a time with a run-check after each.
 
 ---
 
 ## 🎙️ Stage 4: Voice RAG Agent
 
 **Task (from Hamzah):** Upgrade the existing agent (RAG/Agentic RAG) to support natural voice
-conversation in Arabic and English, using Azure Speech. **Status: ✅ Built, tested, and
-documented.**
+conversation in Arabic and English, using Azure Speech. **Status: ✅ Built, tested, documented,
+and demoed.**
 
 ### What was built
 
-A console application (`voice_agent.py`) that wraps the exact same `agent_service.run_agent()`
-used by the text-based app — same three tools (`rag_search`, `calculator`, `create_ticket`),
-same conversation memory logic — behind a full voice interface:
+A console application (`voice/voice_agent.py`) that wraps the exact same
+`core.agent_service.run_agent()` used by the text-based app — same tools, same conversation
+memory logic — behind a full voice interface:
 
 - **Azure Speech-to-Text** with continuous recognition
 - **Automatic language identification** (`ar-JO` / `en-US`) via
@@ -172,7 +225,7 @@ same conversation memory logic — behind a full voice interface:
 
 ### Architecture
 
-See [`voice_agent_architecture.svg`](./voice_agent_architecture.svg) for the full diagram.
+See [`voice/voice_agent_architecture.svg`](./voice/voice_agent_architecture.svg) for the full diagram.
 
 ```
 Normal flow:
@@ -184,12 +237,9 @@ Agent speaking → partial recognition detects real user speech → stop TTS
 → new question → back into the pipeline → new voice response
 ```
 
-### Test Cases — 8/8, confirmed with Hamzah
+### Test Cases — 8/8
 
-> The task's "Test Cases" section requested 8, while "Deliverables" said 5 — confirmed with
-> Hamzah: **8 is correct**, and all 8 are documented below.
-
-Full transcripts and results: [`voice_agent_test_cases.md`](./voice_agent_test_cases.md).
+Full transcripts and results: [`voice/voice_agent_test_cases.md`](./voice/voice_agent_test_cases.md).
 
 | # | Case | Result |
 |---|---|---|
@@ -213,7 +263,7 @@ Full transcripts and results: [`voice_agent_test_cases.md`](./voice_agent_test_c
 - [x] Working Barge-In functionality
 - [x] Architecture diagram
 - [x] 8 test cases documented with results
-- [ ] Short live demo — scheduled with Hamzah
+- [x] Short live demo
 
 ### Known limitations (documented, not hidden)
 
@@ -237,42 +287,162 @@ SDK (i.e. without custom hardware-level Acoustic Echo Cancellation), not design 
 
 ---
 
+## 🖼️ Stage 5: Image Understanding & OCR Agent
+
+**Task (from Hamzah):** Extend the existing agent so it can understand images and extract
+Arabic/English text from them, without running OCR indiscriminately. **Status: ✅ Built and
+tested (8/8).**
+
+### What was built
+
+A console application (`image/image_agent.py`) on top of the same
+`core.agent_service.run_agent()`, with **two new tools** added next to the existing three:
+
+| Tool | Purpose |
+|---|---|
+| `analyze_image` | General visual understanding: people, objects, colors, scene. Explicitly told *not* to transcribe text literally. |
+| `extract_text_ocr` | Literal extraction of Arabic/English text visible in the image. Explicitly told not to guess unclear text and not to let the question's wording influence what it reports. |
+
+**Design decisions**
+
+- **Two separate tools, not one "smart" tool.** The model itself decides per question whether
+  it needs visual understanding, OCR, or both. This satisfies the "no random OCR" requirement
+  using the existing tool-calling mechanism, with no hard-coded routing logic.
+- **Same model, no extra service.** Vision calls use the existing multimodal chat deployment
+  (`gpt-5.4-mini`); no separate Azure AI Vision resource. Vision calls use
+  `max_completion_tokens` (not `max_tokens`).
+- **Image IDs.** Every uploaded image gets a stable ID, and the user can go back to any earlier
+  image with the strict literal command `image N` / `صورة N`. A looser regex was tried and
+  rejected because it produced unintended matches.
+- **Combined with RAG.** Because the image tools live in the same agent, one answer can chain
+  `extract_text_ocr` → `rag_search` → `calculator` (see test case 8).
+
+### Usage
+
+```bash
+python -m image.image_agent
+```
+
+Type the path of an image (e.g. `data\image_test\...`) to upload it, ask questions about it,
+and use `image 2` / `صورة 2` to switch back to an earlier image.
+
+### Architecture
+
+See [`image/image_agent_architecture.svg`](./image/image_agent_architecture.svg).
+
+### Test Cases — 8/8
+
+Full transcripts and results: [`image/image_agent_test_cases.md`](./image/image_agent_test_cases.md).
+
+| # | Case | Result | Accuracy note |
+|---|---|---|---|
+| 1 | Image without text | ✅ | — |
+| 2 | English text (OCR) | ✅ | Corrected a false premise in the question instead of agreeing with it |
+| 3 | Arabic text (OCR) | ✅ | — |
+| 4 | Mixed Arabic + English text | ✅ | — |
+| 5 | Low-quality photographed image | ✅ | Minor misread of a small secondary line of text |
+| 6 | Visual understanding + OCR on the same image | ✅ | — |
+| 7 | Information not present in the image | ✅ | Admitted the field was empty instead of inventing a name |
+| 8 | Integration with RAG (OCR + `rag_search` + `calculator`) | ✅ functionally | Interpretive assumption, see below |
+
+### Known limitations (documented, not hidden)
+
+- **OCR is sensitive to how the question is phrased on low-quality images.** A neutral question
+  ("what is the company name?") gave an accurate answer, while a question presupposing a name
+  once produced a different, wrong one — a known LLM tendency toward sycophantic confirmation.
+  The OCR system prompt now warns against it explicitly; the risk is reduced, not eliminated.
+- **Date arithmetic and unstated interpretation (case 8).** The agent extracted the dates
+  correctly (21/5/2021 → 31/8/2024) and chained all three tools, but:
+  1. First run: it passed an inaccurate duration (4 years instead of ~3 years and 3 months) to
+     `calculator`. Fixed by a system-prompt rule forcing `calculator` to compute the date
+     difference itself.
+  2. After the fix the arithmetic was exact (21 × 3.28 ≈ 68.83 days), but the model chose a
+     *pro-rata* interpretation for the incomplete fourth year. The policy text says "21 days
+     per **full** year", so the strictly literal answer is 21 × 3 = **63 days**. The model's
+     choice is reasonable in real HR practice but is **not supported by the retrieved source**,
+     and it was presented without flagging that more than one reading was possible.
+
+  This is treated as a grounding issue rather than only a calculation bug: better arithmetic
+  does not fix ambiguity in the policy itself. A system-prompt rule now makes the agent count
+  only complete units when the policy says "full year" and state explicitly that the remainder
+  is not covered by the text. Re-tested: case 8 now returns 63 days as the confirmed
+  entitlement and offers the pro-rata figure only as an unconfirmed assumption.
+  - **Remaining weakness:** in that re-test the agent also stated the total duration as
+    1121 days, while the actual difference is 1198 days. It did not change the answer (the
+    entitlement depends on complete years only), but `calculator` evaluates arithmetic
+    expressions, not dates, so date differences are still partly estimated by the model. A
+    dedicated date-difference tool would be the proper fix.
+- **Test image file names don't always match their actual content** (e.g. a file named like a
+  leave request that is actually a resignation certificate). This didn't affect results; it
+  shows the system relies on what is in the image, not on the file name or the question's
+  expectation.
+
+---
+
 ## 📁 File Structure
 
 ```
+Watira AI 2/
 ├── app.py                      # Flask entrypoint (currently uses Agentic RAG)
-├── agent_service.py            # Agentic RAG loop (tool calling)
-├── tools.py                    # The three tools: definition + execution
-├── search_service.py           # Retrieval layer (mock/real)
+├── templates/                  # Flask HTML templates (must stay next to app.py)
 │
-├── adaptive_rag.py             # Adaptive RAG entry point
-├── retrieval_pipeline.py       # Orchestrates stages 1-4 + 6
-├── query_classifier.py         # Stage 1: query classification
-├── adaptive_retriever.py       # Stage 2: adaptive retrieval
-├── query_rewriter.py           # Stage 3: query rewriting
-├── quality_checker.py          # Stage 4: sufficiency check
-├── reranker.py                 # Stage 5: re-ranking and filtering
-├── multi_hop_retriever.py      # Stage 6: multi-hop retrieval
-├── answer_generator.py         # Stage 7: final answer generation
+├── core/                       # Shared agent logic (everything else depends on this)
+│   ├── agent_service.py        # Agentic RAG loop (tool calling, 5 tools)
+│   ├── tools.py                # rag_search, calculator, create_ticket: schema + execution
+│   ├── image_tools.py          # analyze_image, extract_text_ocr: schema + execution
+│   ├── search_service.py       # Retrieval layer (mock/real)
+│   └── embedding_client.py     # Unified embedding function (indexing + query)
 │
-├── embedding_client.py         # Unified embedding function (indexing + query)
-├── build_index.py              # Build/update the Azure AI Search index
-├── generate_docs.py            # Generate sample Word documents for testing
-├── ChunkDocumentsExplained.py  # Splits documents into chunks
-├── chunks.json                 # Text chunks ready for indexing
+├── adaptive_rag/               # Stage 3: Adaptive RAG pipeline
+│   ├── adaptive_rag.py         # Entry point
+│   ├── retrieval_pipeline.py   # Orchestrates stages 1-4 + 6
+│   ├── query_classifier.py     # Stage 1: query classification
+│   ├── adaptive_retriever.py   # Stage 2: adaptive retrieval
+│   ├── query_rewriter.py       # Stage 3: query rewriting
+│   ├── quality_checker.py      # Stage 4: sufficiency check
+│   ├── reranker.py             # Stage 5: re-ranking and filtering
+│   ├── multi_hop_retriever.py  # Stage 6: multi-hop retrieval
+│   └── answer_generator.py     # Stage 7: final answer generation
 │
-├── test_cases.py                    # Agentic RAG tests
-├── test_classifier.py               # Classification tests
-├── test_retriever.py                # Retrieval tests
-├── test_adaptive_rag.py             # Adaptive RAG tests (8 cases)
-├── evaluate_adaptive_rag.py         # Official metrics computation
+├── voice/                      # Stage 4: Voice RAG agent
+│   ├── voice_agent.py
+│   ├── voice_agent_architecture.svg
+│   └── voice_agent_test_cases.md
 │
-├── voice_agent.py                   # Voice RAG entry point (STT + LID + Agent + TTS + Barge-In)
-├── voice_agent_architecture.svg     # Architecture diagram for the voice pipeline
-├── voice_agent_test_cases.md        # 8 documented voice test cases with real transcripts
+├── image/                      # Stage 5: Image understanding + OCR agent
+│   ├── image_agent.py
+│   ├── image_agent_architecture.svg
+│   └── image_agent_test_cases.md
 │
-└── .env                         # (not committed — see .env.example if present)
+├── data/                       # Knowledge base and indexing
+│   ├── chunks.json             # Text chunks ready for indexing
+│   ├── build_index.py          # Build/update the Azure AI Search index
+│   ├── generate_docs.py        # Generate sample Word documents for testing
+│   ├── ChunkDocumentsExplained.py  # Splits documents into chunks
+│   ├── sample_docs_large/      # The 5 source policy documents (.docx)
+│   └── image_test/             # Test images for the image agent
+│
+├── tests/                      # Tests, evaluation, and their result files
+│   ├── test_cases.py
+│   ├── test_classifier.py
+│   ├── test_retriever.py
+│   ├── test_adaptive_rag.py
+│   ├── evaluate_adaptive_rag.py
+│   └── *.json                  # test_results, adaptive_test_results, metrics_report
+│
+├── archive/                    # Week-1 evaluation tooling and early experiments
+│   ├── llm_service.py          # Original generation layer (before Agentic RAG)
+│   ├── evaluate_rag_triad.py   # TruLens RAG Triad evaluation (needs Azure access)
+│   ├── view_dashboard.py       # Opens the TruLens dashboard
+│   └── voice_step1.py          # Early single-turn voice prototype
+│
+├── default.sqlite              # TruLens database (git-ignored; stays at the root on purpose)
+└── .env                        # (not committed — see .env.example)
 ```
+
+> `default.sqlite` stays at the project root because TruLens opens it by a path relative to the
+> *current working directory*. Run the archived TruLens scripts from the project root
+> (`python -m archive.evaluate_rag_triad`), otherwise they will create a new empty database.
 
 ---
 
