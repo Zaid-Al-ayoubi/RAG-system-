@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import azure.cognitiveservices.speech as speechsdk
-from agent_service import run_agent
+from core.agent_service import run_agent
 
 KEY = os.environ["AZURE_SPEECH_KEY"]
 REGION = os.environ["AZURE_SPEECH_REGION"]

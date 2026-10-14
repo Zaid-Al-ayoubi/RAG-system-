@@ -27,7 +27,7 @@ from azure.search.documents.indexes.models import (
     SemanticField,
     SemanticSearch,
 )
-from embedding_client import get_embedding  # نفس الدالة المستخدمة وقت البحث لاحقاً
+from core.embedding_client import get_embedding  # نفس الدالة المستخدمة وقت البحث لاحقاً
 
 load_dotenv()  # يقرأ القيم من ملف .env المجاور للسكريبت
 

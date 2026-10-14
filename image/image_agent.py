@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agent_service import run_agent
+from core.agent_service import run_agent
 
 MAX_HISTORY_TURNS = 6
 VALID_EXT = (".jpg", ".jpeg", ".png", ".webp")

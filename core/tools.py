@@ -8,8 +8,7 @@
 import re
 import uuid
 
-from search_service import search_documents
-
+from core.search_service import search_documents
 # ============================================================
 # 1) RAG Search
 # ============================================================

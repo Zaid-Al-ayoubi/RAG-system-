@@ -11,7 +11,7 @@ RAG يضل شغال بدون أي تأثير، والتقييم الجديد ي�
 """
 
 import os
-from embedding_client import get_embedding            # بيضل كما هو لحد ما ننقل core/
+from core.embedding_client import get_embedding            # بيضل كما هو لحد ما ننقل core/
 from adaptive_rag.reranker import rerank_and_filter   # هاد بس اللي يتغير
 
 # نجيب عدد مرشحين أكبر من top_k الفعلي المطلوب (قبل التصفية)، عشان

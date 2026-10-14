@@ -44,7 +44,7 @@ def _real_search(query: str, top_k: int) -> list[dict]:
     from azure.core.credentials import AzureKeyCredential
     from azure.search.documents import SearchClient
     from azure.search.documents.models import VectorizedQuery
-    from embedding_client import get_embedding
+    from core.embedding_client import get_embedding
 
     client = SearchClient(
         endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
