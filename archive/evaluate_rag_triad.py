@@ -25,8 +25,8 @@ from trulens.core.otel.instrument import instrument  # الكلاس نفسه، �
 from trulens.otel.semconv.trace import SpanAttributes
 from trulens.providers.openai import AzureOpenAI as TruAzureOpenAI
 
-from search_service import search_documents
-from llm_service import generate_answer
+from core.search_service import search_documents
+from archive.llm_service import generate_answer
 
 
 def _retrieval_attributes(ret, exception, *args, **kwargs):

@@ -3,7 +3,7 @@ import os
 from docx import Document
 
 # مجلد الحفظ
-output_dir = "sample_docs_large"
+output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sample_docs_large")
 os.makedirs(output_dir, exist_ok=True)
 
 # ---------------------------------------------------------

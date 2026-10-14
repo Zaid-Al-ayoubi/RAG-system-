@@ -8,7 +8,7 @@
 
 import os
 from openai import AzureOpenAI
-from adaptive_retriever import adaptive_retrieve
+from adaptive_rag.adaptive_retriever import adaptive_retrieve
 
 MAX_HOPS = 3
 

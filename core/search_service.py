@@ -9,17 +9,18 @@
 
 import os
 import json
+from pathlib import Path
 from azure.core.exceptions import HttpResponseError
 
 USE_MOCK = os.environ.get("USE_MOCK_SERVICES", "true").lower() == "true"
-
+CHUNKS_PATH = Path(__file__).resolve().parent.parent / "data" / "chunks.json"
 _MOCK_CHUNKS = None  # نخزنهم بالذاكرة بعد أول تحميل
 
 
 def _load_mock_chunks() -> list[dict]:
     global _MOCK_CHUNKS
     if _MOCK_CHUNKS is None:
-        with open("chunks.json", "r", encoding="utf-8") as f:
+        with open(CHUNKS_PATH, "r", encoding="utf-8") as f:
             _MOCK_CHUNKS = json.load(f)
     return _MOCK_CHUNKS
 
@@ -44,7 +45,7 @@ def _real_search(query: str, top_k: int) -> list[dict]:
     from azure.core.credentials import AzureKeyCredential
     from azure.search.documents import SearchClient
     from azure.search.documents.models import VectorizedQuery
-    from embedding_client import get_embedding
+    from core.embedding_client import get_embedding
 
     client = SearchClient(
         endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],

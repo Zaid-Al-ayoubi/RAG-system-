@@ -10,14 +10,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agent_service import run_agent
+from core.agent_service import run_agent
 
 MAX_HISTORY_TURNS = 6
 VALID_EXT = (".jpg", ".jpeg", ".png", ".webp")
 
 
 def clean_answer(text: str) -> str:
-    text = re.sub(r"[*_`#>]+", "", text)
+    text = re.sub(r"[*`#>]+", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

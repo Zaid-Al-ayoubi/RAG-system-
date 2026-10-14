@@ -8,7 +8,7 @@ import json                 # عشان نكتب النتيجة النهائية 
 import glob                 # عشان نلاقي كل ملفات .docx بمجلد معين تلقائياً
 from docx import Document   # من مكتبة python-docx، عشان نفتح ونقرأ ملفات Word
 import tiktoken              # مكتبة OpenAI لحساب عدد التوكنز الفعلي لأي نص
-
+from pathlib import Path
 # بننشئ الـ encoder مرة وحدة بس بأول الملف، مش جوا كل دالة،
 # عشان ما نعيد تحميله من جديد كل مرة (تحميله فيه تكلفة وقت بسيطة)
 encoding = tiktoken.get_encoding("cl100k_base")
@@ -126,6 +126,8 @@ def process_all_documents(input_dir: str, output_path: str):
 
 
 if __name__ == "__main__":
-    # هاد الشرط بيضمن إنه هاد الكود يشتغل بس لما تشغل الملف مباشرة
-    # مش لو استوردته كموديول بملف تاني
-    process_all_documents(input_dir="./sample_docs_large", output_path="chunks.json")
+    DATA_DIR = Path(__file__).resolve().parent
+    process_all_documents(
+        input_dir=DATA_DIR / "sample_docs_large",
+        output_path=DATA_DIR / "chunks.json",
+    )

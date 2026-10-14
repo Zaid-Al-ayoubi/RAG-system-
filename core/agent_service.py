@@ -11,8 +11,8 @@ import os
 import json
 from openai import AzureOpenAI
 
-from tools import TOOLS_SCHEMA, TOOL_IMPLEMENTATIONS
-from image_tools import IMAGE_TOOLS_SCHEMA, IMAGE_TOOL_IMPLEMENTATIONS
+from core.tools import TOOLS_SCHEMA, TOOL_IMPLEMENTATIONS
+from core.image_tools import IMAGE_TOOLS_SCHEMA, IMAGE_TOOL_IMPLEMENTATIONS
 ALL_TOOLS_SCHEMA = TOOLS_SCHEMA + IMAGE_TOOLS_SCHEMA
 ALL_TOOL_IMPLEMENTATIONS = {**TOOL_IMPLEMENTATIONS, **IMAGE_TOOL_IMPLEMENTATIONS}
 
@@ -46,6 +46,11 @@ AGENT_SYSTEM_PROMPT = """أنت مساعد داخلي للموظفين، عند�
 "5. عند حساب الفرق بين تاريخين (مثل مدة خدمة)، لا تقدّر المدة لغوياً - "
 "استخدم calculator لحساب الفرق بالأيام أو السنوات بدقة رياضية، حتى لو "
 "بدت العملية بسيطة."
+
+
+"6. عند تطبيق أي افتراض أو قاعدة حسابية غير منصوصة حرفياً بالمصدر 
+   المسترجع (مثل احتساب تناسبي لجزء من سنة)، يجب التصريح بذلك بوضوح 
+   كـ'افتراض غير مؤكد من المستند' بدل تقديمه كحقيقة مؤكدة من السياسة."
 
 """
 

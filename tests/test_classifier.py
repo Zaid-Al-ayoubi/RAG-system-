@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from query_classifier import classify_query
+from adaptive_rag.query_classifier import classify_query
 
 TEST_QUERIES = [
     {

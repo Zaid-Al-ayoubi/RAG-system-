@@ -10,7 +10,7 @@ load_dotenv()  # لازم قبل استيراد search_service, llm_service, age
 
 from flask import Flask, request, jsonify, render_template
 
-from agent_service import run_agent
+from core.agent_service import run_agent
 
 app = Flask(__name__)
 
