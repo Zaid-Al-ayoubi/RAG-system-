@@ -14,8 +14,8 @@ understands voice and images.
 | Stage | Description | Status |
 |---|---|---|
 | **1. Basic RAG** | Flask + Azure AI Search (hybrid + semantic) + Azure OpenAI, with grounding and conversation memory | ✅ Complete |
-| **2. Agentic RAG** | Real tool calling: `rag_search`, `calculator`, `create_ticket` | ✅ Complete — 8/8 test cases passing |
-| **3. Adaptive RAG** | 7-stage pipeline: classification → adaptive retrieval → query rewriting → quality check → reranking → multi-hop → answer generation | ✅ Complete |
+| **2. Agentic RAG** | Real tool calling: `rag_search`, `calculator`, `create_ticket` | ✅ Complete — 8/8 tool-selection test cases passing |
+| **3. Adaptive RAG** | 7-stage pipeline: classification → adaptive retrieval → query rewriting → quality check → reranking → multi-hop → answer generation | ✅ Complete — 7/8 test cases pass (see [Stage 3](#-stage-3-adaptive-rag)) |
 | **4. Voice RAG Agent** | Bilingual (Arabic/English) voice conversation with Barge-In support | ✅ Complete — 8/8 test cases passing |
 | **5. Image Understanding & OCR Agent** | Image analysis and Arabic/English OCR, integrated into the same agent | ✅ Built and tested — 8/8 test cases passing |
 
@@ -54,6 +54,40 @@ as the Flask app (same tools, same conversation-memory logic).
 **Dependency direction:** `voice/`, `image/`, `adaptive_rag/`, `tests/` and `app.py` import from
 `core/`; `core/` never imports from them. This keeps the shared agent logic independent of
 any specific interface.
+
+### System data flow
+
+All three interfaces (text, voice, image) converge on the same `run_agent()` loop. The offline
+ingestion script feeds the search index that `rag_search` queries.
+
+```mermaid
+flowchart TD
+    T["Text app<br/>Flask /chat"] --> A
+    V["Voice agent<br/>Azure Speech"] --> A
+    I["Image agent<br/>image IDs"] --> A
+    A["run_agent<br/>tool-calling loop, max 5 rounds"] --> R[rag_search]
+    A --> C[calculator]
+    A --> K[create_ticket]
+    A --> IT["Image tools<br/>analyze + OCR"]
+    R --> S[("Azure AI Search<br/>hybrid + semantic")]
+    IT --> O["Azure OpenAI vision"]
+    D["build_index.py<br/>chunks to embeddings to index"] --> S
+```
+
+### Adaptive RAG pipeline
+
+```mermaid
+flowchart LR
+    Q[Question] --> CL[1 Classify]
+    CL --> RT[2 Retrieve]
+    RT --> RR[5 Rerank]
+    RR --> QC[4 Quality check]
+    QC -->|sufficient or last try| G["7 Generate answer or refusal"]
+    QC -->|not enough| RW[3 Rewrite query]
+    RW --> RT
+    CL -.->|multi_step, first attempt| MH[6 Multi-hop]
+    MH --> QC
+```
 
 > 📎 Detailed architecture diagrams: [`voice/voice_agent_architecture.svg`](./voice/voice_agent_architecture.svg)
 > and [`image/image_agent_architecture.svg`](./image/image_agent_architecture.svg).
@@ -120,6 +154,11 @@ python -m data.build_index
 This deletes the existing index (if any) and recreates it with the correct semantic search
 configuration, then uploads all chunks from `data/chunks.json` along with their embeddings.
 
+Chunking uses paragraph boundaries with a 600-token limit and an 80-token overlap (tiktoken
+`cl100k_base`). The index stores a 1536-dimension vector per chunk (HNSW) plus a semantic
+configuration; the 5 source documents produce 13 chunks. Embeddings use the same function
+(`core/embedding_client.py`) at indexing time and query time, so vectors stay comparable.
+
 > Note: training-tier Azure accounts occasionally lose their `semantic configuration` setting.
 > If you see a `semanticConfiguration` error, simply rerun `python -m data.build_index`.
 
@@ -135,7 +174,7 @@ same reason: importing the package must not trigger any module that reads the en
 
 | Test file | Covers |
 |---|---|
-| `tests/test_cases.py` | 8 Agentic RAG cases (tool selection, execution) |
+| `tests/test_cases.py` | 8 Agentic RAG cases (tool selection and execution; answer quality is reviewed manually) |
 | `tests/test_classifier.py` | Query classification accuracy (type + strategy) |
 | `tests/test_retriever.py` | Combined classification + adaptive retrieval |
 | `tests/test_adaptive_rag.py` | 8 end-to-end Adaptive RAG cases (saves `tests/adaptive_test_results.json`) |
@@ -154,6 +193,55 @@ and [`image/image_agent_test_cases.md`](./image/image_agent_test_cases.md).
 > LLM-backed tests overwrite their result JSON files on every run, and results vary slightly
 > between runs (see *LLM non-determinism* below). Restore the committed results with
 > `git restore tests/<file>.json` if you only wanted to check that the code still runs.
+
+---
+
+## 🧠 Stage 3: Adaptive RAG
+
+Entry point: `adaptive_rag.answer_query(query, top_k, history)`. It is standalone on purpose:
+it does not use `core/agent_service` or `core/tools`, so its evaluation is isolated from the
+Agentic tool-selection behaviour.
+
+| Stage | File | Role | LLM calls |
+|---|---|---|---|
+| 1. Classify | `query_classifier.py` | Query type (`simple` / `multi_source` / `comparison` / `multi_step`) and retrieval strategy; safe fallback to `simple` + `hybrid` | 1 |
+| 2. Retrieve | `adaptive_retriever.py` | `hybrid`, `vector`, `keyword` or `metadata_filtered`; fetches `top_k × 3` candidates per sub-query | embedding per sub-query |
+| 5. Rerank | `reranker.py` | LLM relevance score (0-1), keeps score ≥ 0.5, always keeps at least the best chunk | 1 per sub-query |
+| 4. Quality check | `quality_checker.py` | Sufficiency judgement with a prompt per query type (strict, multi-part, multi-source) | 1 per attempt |
+| 3. Rewrite | `query_rewriter.py` | New phrasing closer to the documents' language (`temperature=0.4`) | 1 |
+| 6. Multi-hop | `multi_hop_retriever.py` | Up to 3 planned hops for `multi_step` questions, first attempt only | 1 between hops |
+| 7. Generate | `answer_generator.py` | Grounded answer with sources, or a **deterministic refusal** (no LLM call) if context is insufficient | 1 or 0 |
+
+`retrieval_pipeline.py` orchestrates stages 1-4 and 6 with at most 3 attempts: attempt 2 rewrites
+the query, attempt 3 rewrites it and escalates the strategy (`hybrid` ↔ `vector`).
+
+**LLM calls per scenario (measured):** a simple question that succeeds first time takes 4 chat
+calls (~10-12 s); a two-part multi-source question takes 5 (~13 s); a failing simple question
+takes 9 (~25 s, no generation call); a failing multi-step question takes 13 (~38 s).
+
+### Latest results (8 cases)
+
+| Metric | Value |
+|---|---|
+| Cases passed | 7/8 (case 3 fails: the sufficiency checker judged the context sufficient where insufficient was expected) |
+| Retrieval Recall / Context Relevance / Groundedness | 85.7% each (6/7; case 6 is the miss) |
+| Precision@K | 100% |
+| Answer Correctness | ~73% (regex-based indicator, see lessons learned) |
+| Query-Rewriting Success | 100% (2 cases) |
+| Avg attempts / Avg latency | 1.5 / ~18 s |
+
+Numbers vary slightly between runs because of LLM non-determinism.
+
+### Known limitations (Adaptive RAG)
+
+- **Latency**: ~15-18 s on average because LLM calls run sequentially (up to 13 calls for a
+  failing multi-step question). Planned: parallel sub-queries, caching, a smaller model for
+  classification.
+- **Follow-up questions**: chat history only reaches the generation stage, not classification or
+  retrieval. Query condensation before classification is the planned fix.
+- **Negative confirmation vs retrieval failure** (case 6): "the platform is not mentioned in that
+  document" is a correct answer, but the checker treats it as insufficient context.
+- **`grounded` flag**: it means "the context was judged sufficient", not a measured groundedness score.
 
 ---
 
@@ -177,6 +265,9 @@ A transparent log of the most significant issues discovered during development (
   or rejected the whole context even when only one part of the question was unsupported →
   sufficiency checking was split by query type (`simple` / `multi_step` & `comparison` /
   `multi_source`), each with an evaluation criterion suited to its nature.
+- **Dead code found during code review (`quality_checker.py`)**: `system_prompt` was assigned
+  twice and the second assignment overrode the first, so `multi_source` questions never used
+  their dedicated prompt. Removed it and re-ran the tests: pass/fail results were unchanged (7/8).
 - **No distinction between "retrieval failure" and "correct negative confirmation"**: a
   multi-hop question about a platform genuinely not mentioned in a specific document is
   currently treated as a full retrieval failure, whereas the correct answer is actually "no,
@@ -184,6 +275,15 @@ A transparent log of the most significant issues discovered during development (
 - **LLM non-determinism even at `temperature=0`**: `multi_source` questions can receive a
   fluctuating sufficiency decision across two identical runs of the same question, due to
   slight variance in reranker output — documented as expected behavior, not a defect.
+- **Limits of the answer-correctness metric**: it is regex overlap on numbers and keywords. It
+  gives full numeric credit when no numbers are expected and penalizes correct partial answers.
+  An LLM-as-judge (the TruLens script exists but was not run) would be more reliable.
+- **Follow-up questions in Adaptive RAG**: chat history only reaches the generation stage, not
+  classification or retrieval. Query condensation before classification is the planned fix.
+- **Citation precision**: a chunk's `section` is the section of its first paragraph, so chunks
+  spanning several sections can be cited under the first section's name.
+- **Calculator hardening**: `**` passes the character whitelist, so an expression like `9**9**9`
+  could consume CPU. An AST-based evaluator would replace `eval`.
 - **Sycophantic confirmation in OCR**: on low-quality images, a question that presupposes a
   value ("is the name X?") could pull the model toward confirming it instead of reading the
   actual text. The OCR system prompt now explicitly warns against this; the risk is reduced,
@@ -220,8 +320,8 @@ memory logic — behind a full voice interface:
   (`ar-JO-TaimNeural` / `en-US-JennyNeural`)
 - **Conversation history** carried across turns, enabling follow-up questions in either language
 - **Real Barge-In**: a background listener runs in parallel with TTS playback; on genuine
-  user speech it stops audio immediately, discards the interrupted turn, and processes the
-  new question
+  user speech it stops audio immediately and processes the new question. (The interrupted
+  answer stays in the history in full, because history is updated before playback starts.)
 
 ### Architecture
 
@@ -376,6 +476,8 @@ Full transcripts and results: [`image/image_agent_test_cases.md`](./image/image_
   leave request that is actually a resignation certificate). This didn't affect results; it
   shows the system relies on what is in the image, not on the file name or the question's
   expectation.
+- **Model-supplied file paths**: `image_path` comes from the model and should be restricted to
+  an allowlisted folder before any production use.
 
 ---
 
@@ -385,6 +487,8 @@ Full transcripts and results: [`image/image_agent_test_cases.md`](./image/image_
 Watira AI 2/
 ├── app.py                      # Flask entrypoint (currently uses Agentic RAG)
 ├── templates/                  # Flask HTML templates (must stay next to app.py)
+├── requirements.txt            # Pinned dependencies
+├── .env.example                # Template for environment variables
 │
 ├── core/                       # Shared agent logic (everything else depends on this)
 │   ├── agent_service.py        # Agentic RAG loop (tool calling, 5 tools)
@@ -415,7 +519,7 @@ Watira AI 2/
 │   └── image_agent_test_cases.md
 │
 ├── data/                       # Knowledge base and indexing
-│   ├── chunks.json             # Text chunks ready for indexing
+│   ├── chunks.json             # Text chunks ready for indexing (13 chunks)
 │   ├── build_index.py          # Build/update the Azure AI Search index
 │   ├── generate_docs.py        # Generate sample Word documents for testing
 │   ├── ChunkDocumentsExplained.py  # Splits documents into chunks
@@ -432,7 +536,7 @@ Watira AI 2/
 │
 ├── archive/                    # Week-1 evaluation tooling and early experiments
 │   ├── llm_service.py          # Original generation layer (before Agentic RAG)
-│   ├── evaluate_rag_triad.py   # TruLens RAG Triad evaluation (needs Azure access)
+│   ├── evaluate_rag_triad.py   # TruLens RAG Triad evaluation (needs Azure access, not run)
 │   ├── view_dashboard.py       # Opens the TruLens dashboard
 │   └── voice_step1.py          # Early single-turn voice prototype
 │
@@ -443,6 +547,17 @@ Watira AI 2/
 > `default.sqlite` stays at the project root because TruLens opens it by a path relative to the
 > *current working directory*. Run the archived TruLens scripts from the project root
 > (`python -m archive.evaluate_rag_triad`), otherwise they will create a new empty database.
+
+---
+
+## ⚠️ General limitations
+
+- Conversation memory (`app.py`) and support tickets are in-memory only (lost on restart,
+  not thread-safe); production would use Redis or a database.
+- `debug=True` and the Flask development server are for local use only.
+- The `calculator` tool uses a character whitelist plus `eval` with no builtins; an AST-based
+  evaluator would be safer (see lessons learned).
+- The knowledge base is small (5 documents, 13 chunks), so results show behaviour, not scale.
 
 ---
 

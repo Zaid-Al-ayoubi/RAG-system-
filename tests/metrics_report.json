@@ -2,12 +2,12 @@
   "retrieval_recall": 0.857,
   "precision_at_k": 1.0,
   "context_relevance": 0.857,
-  "answer_correctness": 0.666,
+  "answer_correctness": 0.727,
   "groundedness": 0.857,
   "retrieval_failure_rate": 0.0,
   "query_rewriting_success_rate": 1.0,
   "avg_retrieval_attempts": 1.5,
-  "avg_latency_seconds": 15.04,
+  "avg_latency_seconds": 18.27,
   "_meta": {
     "total_cases": 8,
     "cases_with_expected_docs": 7,
@@ -18,10 +18,10 @@
   "_answer_correctness_details": [
     {
       "case_id": 1,
-      "score": 0.617,
+      "score": 0.692,
       "numbers_matched": 2,
       "numbers_total": 3,
-      "keywords_matched": 2,
+      "keywords_matched": 3,
       "keywords_total": 4
     },
     {
@@ -34,10 +34,10 @@
     },
     {
       "case_id": 3,
-      "score": 0.333,
-      "numbers_matched": 1,
+      "score": 0.817,
+      "numbers_matched": 3,
       "numbers_total": 3,
-      "keywords_matched": 6,
+      "keywords_matched": 7,
       "keywords_total": 18
     },
     {
@@ -71,10 +71,10 @@
     },
     {
       "case_id": 8,
-      "score": 0.617,
+      "score": 0.542,
       "numbers_matched": 2,
       "numbers_total": 3,
-      "keywords_matched": 2,
+      "keywords_matched": 1,
       "keywords_total": 4
     }
   ]

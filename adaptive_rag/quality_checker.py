@@ -66,11 +66,6 @@ def check_sufficiency(query: str, chunks: list[dict], query_type: str = "simple"
     else:
         system_prompt = QUALITY_CHECK_SYSTEM_PROMPT
    
-    system_prompt = (
-        QUALITY_CHECK_MULTI_PART_PROMPT
-        if query_type in ("multi_step", "comparison")
-        else QUALITY_CHECK_SYSTEM_PROMPT
-    )
 
     client = _client()
     chat_deployment = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]

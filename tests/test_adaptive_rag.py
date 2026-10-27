@@ -28,7 +28,8 @@ from pathlib import Path
 
 load_dotenv()
 
-from adaptive_rag import answer_query
+from adaptive_rag.adaptive_rag import answer_query
+
 
 
 # ============================================================
